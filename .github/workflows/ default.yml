@@ -1,0 +1,68 @@
+# This is a workflow to extract IPv4 and IPv6 addresses from a specified IP list and generate an RSC file for RouterOS direct IP lists and RSC files with GitHub Actions.
+
+name: Generate RouterOS Direct IP List and RSC file
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Run daily at 00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download raw IP list
+        id: download
+        run: |
+          raw_list_url="https://raw.githubusercontent.com/jiange1236/smartdns-rules/refs/heads/release/Loyalsoldier/ipset/cn%2Bprivate.txt"
+          raw_list_file="list/direct_ip.list"
+
+          echo "::group::Downloading raw IP list"
+          if curl -s -z "$raw_list_file" "$raw_list_url" -o "$raw_list_file"; then
+            echo "::notice::Raw list file downloaded or updated."
+            echo "::set-output name=files_updated::true"
+          else
+            echo "::notice::Raw list file has not changed."
+          fi
+          echo "::endgroup::"
+
+      - name: Generate files
+        if: steps.download.outputs.files_updated == 'true'
+        run: |
+          echo "::group::Generating files"
+
+          ipv4_list_file="list/direct_ipv4.list"
+          awk '$0 !~ "::" { print }' "list/direct_ip.list" > "$ipv4_list_file" || { echo "::error::Failed to process IPv4 addresses"; exit 1; }
+          echo "::notice::IPv4 list file generated: $ipv4_list_file"
+
+          ipv6_list_file="list/direct_ipv6.list"
+          awk '$0 ~ "::" { print }' "list/direct_ip.list" > "$ipv6_list_file" || { echo "::error::Failed to process IPv6 addresses"; exit 1; }
+          echo "::notice::IPv6 list file generated: $ipv6_list_file"
+
+          ipv4_rsc_file="file/firewall/address/direct_ipv4.rsc"
+          echo "/ip firewall address-list" > "$ipv4_rsc_file"
+          awk '{ printf "add address=%s list=direct_ip comment=\"direct ip address\"\n", $0 }' "$ipv4_list_file" >> "$ipv4_rsc_file" || { echo "::error::Failed to generate IPv4 RSC file"; exit 1; }
+          echo "::notice::IPv4 RSC file generated: $ipv4_rsc_file"
+
+          ipv6_rsc_file="file/firewall/address/direct_ipv6.rsc"
+          echo "/ip firewall address-list" > "$ipv6_rsc_file"
+          awk '{ printf "add address=%s list=direct_ip comment=\"direct ip address\"\n", $0 }' "$ipv6_list_file" >> "$ipv6_rsc_file" || { echo "::error::Failed to generate IPv6 RSC file"; exit 1; }
+          echo "::notice::IPv6 RSC file generated: $ipv6_rsc_file"
+
+          echo "::endgroup::"
+
+      - name: Commit and push if there are changes
+        if: steps.download.outputs.files_updated == 'true'
+        run: |
+          git config user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config user.name "${{ secrets.GIT_USER_NAME }}"
+          git add list/direct_ipv4.list list/direct_ipv6.list file/firewall/address/direct_ipv4.rsc file/firewall/address/direct_ipv6.rsc
+          git commit -m "Update direct IP list and RSC files"
+          git push
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
