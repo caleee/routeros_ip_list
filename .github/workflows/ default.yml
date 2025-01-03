@@ -20,13 +20,24 @@ jobs:
         run: |
           raw_list_url="https://raw.githubusercontent.com/jiange1236/smartdns-rules/refs/heads/release/Loyalsoldier/ipset/cn%2Bprivate.txt"
           raw_list_file="list/direct_ip.list"
+          temp_file=$(mktemp)
 
           echo "::group::Downloading raw IP list"
-          if curl -s -z "$raw_list_file" "$raw_list_url" -o "$raw_list_file"; then
-            echo "::notice::Raw list file downloaded or updated."
-            echo "files_updated=true" >> $GITHUB_OUTPUT
+          if curl -s "$raw_list_url" -o "$temp_file"; then
+            echo "::notice::Raw list file downloaded."
+            new_hash=$(sha256sum "$temp_file" | awk '{print $1}')
+            old_hash=$(sha256sum "$raw_list_file" | awk '{print $1}')
+            if [ "$new_hash" != "$old_hash" ]; then
+              echo "::notice::Raw list file has changed."
+              mv "$temp_file" "$raw_list_file"
+              echo "files_updated=true" >> $GITHUB_OUTPUT
+            else
+              echo "::notice::Raw list file has not changed."
+              rm "$temp_file"
+            fi
           else
-            echo "::notice::Raw list file has not changed."
+            echo "::error::Failed to download raw list file."
+            exit 1
           fi
           echo "::endgroup::"
 
