@@ -24,7 +24,7 @@ jobs:
           echo "::group::Downloading raw IP list"
           if curl -s -z "$raw_list_file" "$raw_list_url" -o "$raw_list_file"; then
             echo "::notice::Raw list file downloaded or updated."
-            echo "::set-output name=files_updated::true"
+            echo "files_updated=true" >> $GITHUB_OUTPUT
           else
             echo "::notice::Raw list file has not changed."
           fi
@@ -60,7 +60,7 @@ jobs:
         run: |
           git config user.email "${{ secrets.GIT_USER_EMAIL }}"
           git config user.name "${{ secrets.GIT_USER_NAME }}"
-          git add list/direct_ipv4.list list/direct_ipv6.list file/firewall/address/direct_ipv4.rsc file/firewall/address/direct_ipv6.rsc
+          git add list/direct_ip.list list/direct_ipv4.list list/direct_ipv6.list file/firewall/address/direct_ipv4.rsc file/firewall/address/direct_ipv6.rsc
           git commit -m "Update direct IP list and RSC files"
           git push
 
